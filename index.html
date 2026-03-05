@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Maze Puzzle</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="title">
+          <h1>Maze Puzzle</h1>
+          <p class="subtitle">Find the exit. Arrow keys / WASD, or swipe.</p>
+        </div>
+        <div class="controls">
+          <label class="field">
+            <span>Size</span>
+            <select id="sizeSelect" aria-label="Maze size">
+              <option value="10">10×10</option>
+              <option value="15" selected>15×15</option>
+              <option value="20">20×20</option>
+              <option value="25">25×25</option>
+              <option value="30">30×30</option>
+            </select>
+          </label>
+          <button id="newBtn" class="btn">New maze</button>
+          <button id="solveBtn" class="btn btn-secondary" title="Toggle solution">
+            Show solution
+          </button>
+          <button id="resetBtn" class="btn btn-secondary" title="Reset player position">
+            Reset
+          </button>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="canvasWrap" role="application" aria-label="Maze canvas">
+          <canvas id="mazeCanvas" width="900" height="900"></canvas>
+          <div class="hud">
+            <div id="statusText" class="status">Generating…</div>
+            <div class="stats">
+              <div><span class="label">Moves</span> <span id="movesText">0</span></div>
+              <div><span class="label">Time</span> <span id="timeText">0:00</span></div>
+            </div>
+          </div>
+        </div>
+
+        <section class="help">
+          <h2>How to play</h2>
+          <ul>
+            <li><b>Move</b>: Arrow keys, WASD, or swipe on the maze.</li>
+            <li><b>Goal</b>: Reach the green exit square.</li>
+            <li><b>New maze</b>: Changes the layout but keeps the size.</li>
+          </ul>
+          <details>
+            <summary>Hosting</summary>
+            <p>
+              This is a static site. Upload the folder to any web server, or run a local static server.
+            </p>
+            <pre><code>cd maze-puzzle
+python -m http.server 8000</code></pre>
+            <p>Then open <code>http://localhost:8000</code>.</p>
+          </details>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>Tip: press <kbd>R</kbd> to reset, <kbd>N</kbd> for new maze, <kbd>H</kbd> to toggle solution.</span>
+      </footer>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
