@@ -29,6 +29,31 @@ body.tilt-mode{
   overflow: hidden;
 }
 
+body.rotate-warning{
+  overflow: hidden;
+}
+
+/* If the phone rotates anyway, keep the UI visually portrait */
+body.tilt-mode.landscape-compensate .app{
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  height: 100vw;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center;
+  margin: 0;
+}
+body.tilt-mode.landscape-compensate .main{
+  height: calc(100% - 62px);
+}
+body.tilt-mode.landscape-compensate .canvasWrap{
+  height: 100%;
+}
+body.tilt-mode.landscape-compensate canvas{
+  width: min(100%, 92vw);
+}
+
 .app{
   max-width: 1100px;
   margin: 0 auto;
@@ -143,6 +168,38 @@ body.tilt-mode .main{
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+
+.rotateOverlay{
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+body.rotate-warning .rotateOverlay{
+  display: grid;
+}
+.rotateCard{
+  width: min(520px, 92%);
+  background: rgba(15, 20, 38, 0.85);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 16px;
+  padding: 14px 14px;
+  box-shadow: 0 18px 80px rgba(0,0,0,.55);
+}
+.rotateTitle{
+  font-weight: 800;
+  letter-spacing: .2px;
+  margin-bottom: 6px;
+}
+.rotateBody{
+  color: rgba(255,255,255,.78);
+  line-height: 1.4;
+  font-size: 13px;
 }
 
 canvas{

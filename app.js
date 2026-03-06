@@ -6,6 +6,7 @@ const newBtn = document.getElementById("newBtn");
 const resetBtn = document.getElementById("resetBtn");
 const solveBtn = document.getElementById("solveBtn");
 const tiltBtn = document.getElementById("tiltBtn");
+const rotateOverlay = document.getElementById("rotateOverlay");
 const statusText = document.getElementById("statusText");
 const movesText = document.getElementById("movesText");
 const timeText = document.getElementById("timeText");
@@ -203,6 +204,7 @@ let tiltSupported = false;
 let tiltGamma = 0; // left/right (-90..90)
 let tiltBeta = 0;  // front/back (-180..180)
 let lastTiltMoveMs = 0;
+let tiltPausedForRotation = false;
 
 function setStatus(msg) {
   if (statusText) statusText.textContent = msg;
@@ -546,6 +548,9 @@ function disableTiltControls() {
   if (tiltBtn) tiltBtn.textContent = "Enable tilt";
   setStatus("Tilt off");
   document.body.classList.remove("tilt-mode");
+  document.body.classList.remove("rotate-warning");
+  document.body.classList.remove("landscape-compensate");
+  tiltPausedForRotation = false;
   if (document.fullscreenElement) {
     document.exitFullscreen?.().catch?.(() => {});
   }
@@ -567,7 +572,21 @@ async function enterTiltPlayMode() {
 
   // Fullscreen + orientation lock are best-effort (varies by browser).
   try {
-    await canvas.requestFullscreen?.({ navigationUI: "hide" });
+    // Request fullscreen on the whole document for best Android support.
+    const el = document.documentElement;
+    await el.requestFullscreen?.({ navigationUI: "hide" });
+  } catch {
+    // ignore
+  }
+  await tryLockOrientation();
+
+  render();
+}
+
+async function tryLockOrientation() {
+  try {
+    await screen.orientation?.lock?.("portrait-primary");
+    return;
   } catch {
     // ignore
   }
@@ -576,8 +595,21 @@ async function enterTiltPlayMode() {
   } catch {
     // ignore
   }
+}
 
-  render();
+function isLandscapeNow() {
+  // Prefer matchMedia; works broadly.
+  return window.matchMedia?.("(orientation: landscape)")?.matches ?? (window.innerWidth > window.innerHeight);
+}
+
+function updateRotationGuardUI() {
+  const shouldWarn = tiltEnabled && isLandscapeNow();
+  tiltPausedForRotation = shouldWarn;
+  document.body.classList.toggle("rotate-warning", shouldWarn);
+  document.body.classList.toggle("landscape-compensate", tiltEnabled && isLandscapeNow());
+  if (rotateOverlay) {
+    rotateOverlay.setAttribute("aria-hidden", shouldWarn ? "false" : "true");
+  }
 }
 
 // UI wiring
@@ -610,7 +642,7 @@ function tick() {
   }
 
   // tilt-to-move (cell steps with cooldown)
-  if (tiltEnabled && !won) {
+  if (tiltEnabled && !won && !tiltPausedForRotation) {
     const now = performance.now();
     const cooldownMs = 85;
     const dead = 10; // degrees
@@ -635,7 +667,8 @@ function tick() {
   }
 }
 
-window.addEventListener("resize", () => render(), { passive: true });
+window.addEventListener("resize", () => { updateRotationGuardUI(); render(); }, { passive: true });
+window.addEventListener("orientationchange", () => { updateRotationGuardUI(); void tryLockOrientation(); }, { passive: true });
 
 // start
 newGame(sizeSelect?.value ?? 15);
@@ -653,4 +686,8 @@ document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && tiltEnabled) {
     document.body.classList.remove("tilt-mode");
   }
+  updateRotationGuardUI();
+  void tryLockOrientation();
 }, { passive: true });
+
+updateRotationGuardUI();

@@ -40,6 +40,12 @@
       <main class="main">
         <div class="canvasWrap" role="application" aria-label="Maze canvas">
           <canvas id="mazeCanvas" width="900" height="900"></canvas>
+          <div id="rotateOverlay" class="rotateOverlay" aria-live="polite" aria-hidden="true">
+            <div class="rotateCard">
+              <div class="rotateTitle">Rotate back</div>
+              <div class="rotateBody">Tilt mode works best in portrait. Please rotate your phone back to portrait.</div>
+            </div>
+          </div>
           <div class="hud">
             <div id="statusText" class="status">Generating…</div>
             <div class="stats">
