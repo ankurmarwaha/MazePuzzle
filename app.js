@@ -5,6 +5,7 @@ const sizeSelect = /** @type {HTMLSelectElement} */ (document.getElementById("si
 const newBtn = document.getElementById("newBtn");
 const resetBtn = document.getElementById("resetBtn");
 const solveBtn = document.getElementById("solveBtn");
+const tiltBtn = document.getElementById("tiltBtn");
 const statusText = document.getElementById("statusText");
 const movesText = document.getElementById("movesText");
 const timeText = document.getElementById("timeText");
@@ -193,6 +194,13 @@ let startTimeMs = 0;
 let running = false;
 let rafId = 0;
 
+// tilt controls (mobile orientation)
+let tiltEnabled = false;
+let tiltSupported = false;
+let tiltGamma = 0; // left/right (-90..90)
+let tiltBeta = 0;  // front/back (-180..180)
+let lastTiltMoveMs = 0;
+
 function setStatus(msg) {
   if (statusText) statusText.textContent = msg;
 }
@@ -346,14 +354,7 @@ function render() {
   const px = ox + player.x * cell + cell / 2;
   const py = oy + player.y * cell + cell / 2;
   const pr = Math.max(4, Math.floor(cell * 0.28));
-  ctx.save();
-  ctx.fillStyle = won ? "rgba(34,197,94,0.95)" : "rgba(255,255,255,0.95)";
-  ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = Math.max(6, Math.floor(cell * 0.22));
-  ctx.beginPath();
-  ctx.arc(px, py, pr, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  drawSteelBall(px, py, pr, won);
 
   // label
   ctx.save();
@@ -362,6 +363,79 @@ function render() {
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   ctx.fillText(`${maze.w}×${maze.h}`, ox, Math.max(10, oy - Math.floor(cell * 0.7)));
+  ctx.restore();
+}
+
+/**
+ * Draw a steel-ish 3D ball using layered gradients.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} r
+ * @param {boolean} isWon
+ */
+function drawSteelBall(x, y, r, isWon) {
+  const shadowBlur = Math.max(8, Math.floor(r * 1.05));
+  const shadowOffset = Math.max(2, Math.floor(r * 0.45));
+
+  // soft ground shadow
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(x + shadowOffset * 0.55, y + shadowOffset, r * 0.95, r * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = shadowBlur;
+  ctx.shadowOffsetY = Math.max(1, Math.floor(r * 0.18));
+
+  // base steel gradient
+  const hx = x - r * 0.35;
+  const hy = y - r * 0.45;
+  const g = ctx.createRadialGradient(hx, hy, Math.max(1, r * 0.15), x, y, r);
+  if (isWon) {
+    // green-tinted "steel" for the win state
+    g.addColorStop(0.0, "rgba(232, 255, 242, 0.98)");
+    g.addColorStop(0.25, "rgba(140, 255, 195, 0.92)");
+    g.addColorStop(0.55, "rgba(34, 197, 94, 0.92)");
+    g.addColorStop(1.0, "rgba(12, 88, 40, 0.98)");
+  } else {
+    g.addColorStop(0.0, "rgba(255,255,255,0.98)");
+    g.addColorStop(0.22, "rgba(210,220,230,0.95)");
+    g.addColorStop(0.55, "rgba(130,145,160,0.96)");
+    g.addColorStop(1.0, "rgba(38,45,56,0.98)");
+  }
+
+  ctx.beginPath();
+  ctx.fillStyle = g;
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // specular highlight
+  ctx.shadowBlur = 0;
+  const s1 = ctx.createRadialGradient(x - r * 0.40, y - r * 0.48, 0, x - r * 0.40, y - r * 0.48, r * 0.7);
+  s1.addColorStop(0, "rgba(255,255,255,0.85)");
+  s1.addColorStop(0.25, "rgba(255,255,255,0.30)");
+  s1.addColorStop(1, "rgba(255,255,255,0.00)");
+  ctx.fillStyle = s1;
+  ctx.beginPath();
+  ctx.arc(x - r * 0.18, y - r * 0.22, r * 0.85, 0, Math.PI * 2);
+  ctx.fill();
+
+  // subtle rim / edge
+  ctx.strokeStyle = isWon ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.22)";
+  ctx.lineWidth = Math.max(1, Math.floor(r * 0.12));
+  ctx.beginPath();
+  ctx.arc(x, y, r - ctx.lineWidth * 0.5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // tiny sharp glint
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath();
+  ctx.arc(x - r * 0.42, y - r * 0.48, Math.max(1, r * 0.12), 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.restore();
 }
 
@@ -425,11 +499,59 @@ canvas.addEventListener("pointercancel", () => {
   pointerStart = null;
 });
 
+function isDeviceOrientationSupported() {
+  return typeof window.DeviceOrientationEvent !== "undefined";
+}
+
+async function enableTiltControls() {
+  if (!isDeviceOrientationSupported()) {
+    setStatus("Tilt not supported");
+    return;
+  }
+
+  // iOS 13+ requires explicit permission from a user gesture.
+  const anyDOE = /** @type {any} */ (window.DeviceOrientationEvent);
+  if (typeof anyDOE?.requestPermission === "function") {
+    try {
+      const res = await anyDOE.requestPermission();
+      if (res !== "granted") {
+        setStatus("Tilt permission denied");
+        return;
+      }
+    } catch {
+      setStatus("Tilt permission blocked");
+      return;
+    }
+  }
+
+  tiltEnabled = true;
+  if (tiltBtn) tiltBtn.textContent = "Tilt on";
+  setStatus("Tilt enabled");
+}
+
+function disableTiltControls() {
+  tiltEnabled = false;
+  if (tiltBtn) tiltBtn.textContent = "Enable tilt";
+  setStatus("Tilt off");
+}
+
+function toggleTiltControls() {
+  if (tiltEnabled) disableTiltControls();
+  else void enableTiltControls();
+}
+
+window.addEventListener("deviceorientation", (e) => {
+  // gamma: left/right, beta: front/back
+  if (typeof e.gamma === "number") tiltGamma = tiltGamma * 0.75 + e.gamma * 0.25;
+  if (typeof e.beta === "number") tiltBeta = tiltBeta * 0.75 + e.beta * 0.25;
+}, { passive: true });
+
 // UI wiring
 newBtn?.addEventListener("click", () => newGame(sizeSelect?.value ?? 15));
 resetBtn?.addEventListener("click", () => resetPlayer());
 solveBtn?.addEventListener("click", () => toggleSolution());
 sizeSelect?.addEventListener("change", () => newGame(sizeSelect.value));
+tiltBtn?.addEventListener("click", () => toggleTiltControls());
 
 // animation loop for timer
 function tick() {
@@ -437,6 +559,31 @@ function tick() {
   if (!running) return;
   const ms = performance.now() - startTimeMs;
   setTime(ms);
+
+  // tilt-to-move (cell steps with cooldown)
+  if (tiltEnabled && !won) {
+    const now = performance.now();
+    const cooldownMs = 140;
+    const dead = 10; // degrees
+
+    // Decide move direction from strongest axis
+    const ax = tiltGamma; // + => right
+    const ay = tiltBeta;  // + => down (phone top toward user => negative beta, but we keep simple)
+    let mdx = 0, mdy = 0;
+
+    if (Math.abs(ax) > Math.abs(ay)) {
+      if (ax > dead) mdx = 1;
+      else if (ax < -dead) mdx = -1;
+    } else {
+      if (ay > dead) mdy = 1;
+      else if (ay < -dead) mdy = -1;
+    }
+
+    if ((mdx !== 0 || mdy !== 0) && (now - lastTiltMoveMs) >= cooldownMs) {
+      lastTiltMoveMs = now;
+      tryMove(mdx, mdy);
+    }
+  }
 }
 
 window.addEventListener("resize", () => render(), { passive: true });
@@ -445,3 +592,9 @@ window.addEventListener("resize", () => render(), { passive: true });
 newGame(sizeSelect?.value ?? 15);
 cancelAnimationFrame(rafId);
 tick();
+
+// init tilt UI visibility
+tiltSupported = isDeviceOrientationSupported();
+if (tiltBtn) {
+  tiltBtn.style.display = tiltSupported ? "" : "none";
+}
