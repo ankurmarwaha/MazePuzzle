@@ -184,7 +184,10 @@ let start = { x: 0, y: 0 };
 /** @type {Pt} */
 let goal = { x: maze.w - 1, y: maze.h - 1 };
 /** @type {Pt} */
-let player = { x: 0, y: 0 };
+let playerCell = { x: 0, y: 0 };
+/** @type {{x:number,y:number}} */
+let playerDraw = { x: 0, y: 0 };
+let moveAnim = null; // {from:Pt,to:Pt,t0:number,dur:number}
 /** @type {Pt[]} */
 let solutionPath = solveMaze(maze, start, goal);
 let showSolution = false;
@@ -222,7 +225,9 @@ function newGame(size) {
   maze = generateMaze(n, n);
   start = { x: 0, y: 0 };
   goal = { x: maze.w - 1, y: maze.h - 1 };
-  player = { x: start.x, y: start.y };
+  playerCell = { x: start.x, y: start.y };
+  playerDraw = { x: start.x, y: start.y };
+  moveAnim = null;
   solutionPath = solveMaze(maze, start, goal);
   moves = 0;
   won = false;
@@ -236,7 +241,9 @@ function newGame(size) {
 }
 
 function resetPlayer() {
-  player = { x: start.x, y: start.y };
+  playerCell = { x: start.x, y: start.y };
+  playerDraw = { x: start.x, y: start.y };
+  moveAnim = null;
   moves = 0;
   won = false;
   setMoves(moves);
@@ -248,8 +255,9 @@ function resetPlayer() {
 /** @param {number} dx @param {number} dy */
 function tryMove(dx, dy) {
   if (won) return;
-  const x = player.x;
-  const y = player.y;
+  if (moveAnim) return;
+  const x = playerCell.x;
+  const y = playerCell.y;
   let dir = null;
   if (dx === 0 && dy === -1) dir = DIRS[0];
   else if (dx === 1 && dy === 0) dir = DIRS[1];
@@ -262,7 +270,9 @@ function tryMove(dx, dy) {
   const nx = x + dir.dx;
   const ny = y + dir.dy;
   if (!maze.inBounds(nx, ny)) return;
-  player = { x: nx, y: ny };
+  const from = { x, y };
+  const to = { x: nx, y: ny };
+  playerCell = to;
   moves += 1;
   setMoves(moves);
 
@@ -273,7 +283,8 @@ function tryMove(dx, dy) {
   } else {
     setStatus("Keep going");
   }
-  render();
+  const now = performance.now();
+  moveAnim = { from, to, t0: now, dur: 130 };
 }
 
 function setCanvasSizeToDisplay() {
@@ -351,8 +362,8 @@ function render() {
   ctx.restore();
 
   // player
-  const px = ox + player.x * cell + cell / 2;
-  const py = oy + player.y * cell + cell / 2;
+  const px = ox + playerDraw.x * cell + cell / 2;
+  const py = oy + playerDraw.y * cell + cell / 2;
   const pr = Math.max(4, Math.floor(cell * 0.28));
   drawSteelBall(px, py, pr, won);
 
@@ -527,12 +538,17 @@ async function enableTiltControls() {
   tiltEnabled = true;
   if (tiltBtn) tiltBtn.textContent = "Tilt on";
   setStatus("Tilt enabled");
+  await enterTiltPlayMode();
 }
 
 function disableTiltControls() {
   tiltEnabled = false;
   if (tiltBtn) tiltBtn.textContent = "Enable tilt";
   setStatus("Tilt off");
+  document.body.classList.remove("tilt-mode");
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch?.(() => {});
+  }
 }
 
 function toggleTiltControls() {
@@ -545,6 +561,24 @@ window.addEventListener("deviceorientation", (e) => {
   if (typeof e.gamma === "number") tiltGamma = tiltGamma * 0.75 + e.gamma * 0.25;
   if (typeof e.beta === "number") tiltBeta = tiltBeta * 0.75 + e.beta * 0.25;
 }, { passive: true });
+
+async function enterTiltPlayMode() {
+  document.body.classList.add("tilt-mode");
+
+  // Fullscreen + orientation lock are best-effort (varies by browser).
+  try {
+    await canvas.requestFullscreen?.({ navigationUI: "hide" });
+  } catch {
+    // ignore
+  }
+  try {
+    await screen.orientation?.lock?.("portrait");
+  } catch {
+    // ignore
+  }
+
+  render();
+}
 
 // UI wiring
 newBtn?.addEventListener("click", () => newGame(sizeSelect?.value ?? 15));
@@ -560,10 +594,25 @@ function tick() {
   const ms = performance.now() - startTimeMs;
   setTime(ms);
 
+  // movement animation (smooth between cells)
+  if (moveAnim) {
+    const now = performance.now();
+    const t = Math.min(1, (now - moveAnim.t0) / moveAnim.dur);
+    const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
+    playerDraw.x = moveAnim.from.x + (moveAnim.to.x - moveAnim.from.x) * e;
+    playerDraw.y = moveAnim.from.y + (moveAnim.to.y - moveAnim.from.y) * e;
+    if (t >= 1) {
+      playerDraw.x = moveAnim.to.x;
+      playerDraw.y = moveAnim.to.y;
+      moveAnim = null;
+    }
+    render();
+  }
+
   // tilt-to-move (cell steps with cooldown)
   if (tiltEnabled && !won) {
     const now = performance.now();
-    const cooldownMs = 140;
+    const cooldownMs = 85;
     const dead = 10; // degrees
 
     // Decide move direction from strongest axis
@@ -598,3 +647,10 @@ tiltSupported = isDeviceOrientationSupported();
 if (tiltBtn) {
   tiltBtn.style.display = tiltSupported ? "" : "none";
 }
+
+// if the user exits fullscreen manually, restore layout (keep tilt enabled)
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && tiltEnabled) {
+    document.body.classList.remove("tilt-mode");
+  }
+}, { passive: true });
