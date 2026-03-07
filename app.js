@@ -8,7 +8,6 @@ const solveBtn = document.getElementById("solveBtn");
 const tiltBtn = document.getElementById("tiltBtn");
 const rotateOverlay = document.getElementById("rotateOverlay");
 const statusText = document.getElementById("statusText");
-const movesText = document.getElementById("movesText");
 const timeText = document.getElementById("timeText");
 
 if (!ctx) throw new Error("Canvas 2D context unavailable");
@@ -192,7 +191,6 @@ let moveAnim = null; // {from:Pt,to:Pt,t0:number,dur:number}
 /** @type {Pt[]} */
 let solutionPath = solveMaze(maze, start, goal);
 let showSolution = false;
-let moves = 0;
 let won = false;
 let startTimeMs = 0;
 let running = false;
@@ -208,9 +206,6 @@ let tiltPausedForRotation = false;
 
 function setStatus(msg) {
   if (statusText) statusText.textContent = msg;
-}
-function setMoves(n) {
-  if (movesText) movesText.textContent = String(n);
 }
 function setTime(ms) {
   if (timeText) timeText.textContent = formatTime(ms);
@@ -231,11 +226,9 @@ function newGame(size) {
   playerDraw = { x: start.x, y: start.y };
   moveAnim = null;
   solutionPath = solveMaze(maze, start, goal);
-  moves = 0;
   won = false;
   showSolution = false;
   if (solveBtn) solveBtn.textContent = "Show solution";
-  setMoves(moves);
   setTime(0);
   resetRunClock();
   setStatus("Good luck");
@@ -246,9 +239,7 @@ function resetPlayer() {
   playerCell = { x: start.x, y: start.y };
   playerDraw = { x: start.x, y: start.y };
   moveAnim = null;
-  moves = 0;
   won = false;
-  setMoves(moves);
   resetRunClock();
   setStatus("Reset");
   render();
@@ -275,8 +266,6 @@ function tryMove(dx, dy) {
   const from = { x, y };
   const to = { x: nx, y: ny };
   playerCell = to;
-  moves += 1;
-  setMoves(moves);
 
   if (nx === goal.x && ny === goal.y) {
     won = true;
@@ -286,7 +275,7 @@ function tryMove(dx, dy) {
     setStatus("Keep going");
   }
   const now = performance.now();
-  moveAnim = { from, to, t0: now, dur: 130 };
+  moveAnim = { from, to, t0: now, dur: 190 };
 }
 
 function setCanvasSizeToDisplay() {
@@ -644,7 +633,7 @@ function tick() {
   // tilt-to-move (cell steps with cooldown)
   if (tiltEnabled && !won && !tiltPausedForRotation) {
     const now = performance.now();
-    const cooldownMs = 85;
+    const cooldownMs = 190;
     const dead = 10; // degrees
 
     // Decide move direction from strongest axis
